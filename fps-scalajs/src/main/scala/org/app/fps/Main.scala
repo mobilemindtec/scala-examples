@@ -25,10 +25,8 @@ case class User(id: Int,
 
 
 
-// usado para conectar eventos de subscriptions
 private val dynOwner = new DynamicOwner(() => ())
 
-// connecta o evento de validação do code no eventBuss
 private val dynSub = DynamicSubscription.unsafe(
   dynOwner,
   activate = (owner: Owner) =>

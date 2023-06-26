@@ -2,15 +2,11 @@
 # The introduction to Reactive Programming you've been missing
 
 
-Port JS Rx code to ScalaJS code with AirStream
+Port RxJS code to ScalaJS/AirStream
 
 ### references
 
 https://gist.github.com/staltz/868e7e9bc2a7b8c1f754
-
-http://jsfiddle.net/staltz/8jFJH/48/
-
-http://localhost:63342/fps-app/public/index.html?_ijt=v6fh6fklgge1hr4fpqr0nf0akb&_ij_reload=RELOAD_ON_SAVE#
 
 
 
@@ -59,3 +55,13 @@ http://localhost:63342/fps-app/public/index.html?_ijt=v6fh6fklgge1hr4fpqr0nf0akb
 
 ```
 
+## Dev
+
+On sbt console, execute:
+
+```shell
+sbt> livereload
+sbt> ~fastLinkJS
+```
+
+Open browser on http://localhost:3000

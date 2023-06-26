@@ -9,8 +9,9 @@ import com.raquo.airstream.ownership.{DynamicOwner, DynamicSubscription, Owner, 
 import com.raquo.airstream.web.{DomEventStream, FetchStream}
 import com.raquo.laminar.api.L.{SwitchSignalStrategy, Val}
 import org.getshaka.nativeconverter.NativeConverter
+import org.scalajs
 import org.scalajs.dom
-import org.scalajs.dom.{HTMLButtonElement, MouseEvent, window}
+import org.scalajs.dom.{HTMLButtonElement, HTMLImageElement, HTMLLinkElement, HTMLUListElement, MouseEvent, window}
 
 import scala.scalajs.js
 import scala.scalajs.js.JSON
@@ -35,82 +36,85 @@ private val dynSub = DynamicSubscription.unsafe(
     appStart()
 )
 
-val githubUrl = "https://api.github.com/users"
-
-def appStart2(using owner: Owner) =
-  val refreshButton = document.querySelector(".refresh").asInstanceOf[HTMLButtonElement]
-  val _refreshClickStream = DomEventStream[dom.MouseEvent](refreshButton, "click")
-  val refreshClickSignal = _refreshClickStream.startWithNone
-
-  val closeButton = document.querySelector(".close1").asInstanceOf[HTMLButtonElement]
-  val _closeClickStream = DomEventStream[dom.MouseEvent](closeButton, "click")
-  val closeClickSignal = _closeClickStream.startWithNone
-
-  val refreshClickStream = refreshClickSignal.changes
-  val closeClickStream = closeClickSignal.changes
-
-  refreshClickStream.addObserver(Observer{ _ => println("refresh clicked") })
-  closeClickStream.addObserver(Observer{ _ => println("close button clicked") })
-
-  val combinedStream = refreshClickSignal.combineWith(closeClickSignal).map {
-    (x, y) => s"combined!! $x, $y"
-  }
-
-  val obs = combinedStream.addObserver(Observer{
-    s => println(s)
-  })
-
-
-  obs
-
-def appStart()(implicit owner: Owner) =
-
-  val refreshButton = document.querySelector(".refresh").asInstanceOf[HTMLButtonElement]
-  val refreshClickStream = EventStream.merge(
-    DomEventStream[dom.MouseEvent](refreshButton, "click").mapToUnit,
-    EventStream.fromValue(())
+def createButtonClickStream(selector: String) =
+  val btn = document.querySelector(selector).asInstanceOf[HTMLLinkElement]
+  EventStream.merge(
+    EventStream.fromValue(()),
+    DomEventStream[MouseEvent](btn, "click").mapToUnit,
   )
+def renderSuggestion(user: Option[User], selector: String): Unit =
+  val el = document.querySelector(selector).asInstanceOf[HTMLUListElement]
 
-  val closeButton = document.querySelector(".close1").asInstanceOf[HTMLButtonElement]
-  val closeClickStream = EventStream.merge(
-    DomEventStream[dom.MouseEvent](closeButton, "click").mapToUnit,
-    EventStream.fromValue(())
-  )
+  if user.isEmpty then
+    el.style.visibility = "hidden"
+  else
+    val u = user.get
+    el.style.visibility = "visible"
+    val usernameEl = el.querySelector(".username").asInstanceOf[HTMLLinkElement]
+    val imgEl = el.querySelector("img").asInstanceOf[HTMLImageElement]
+    usernameEl.href = u.url
+    usernameEl.textContent = u.login
+    imgEl.src = ""
+    imgEl.src = u.avatar_url
+
+def appStart()(using owner: Owner) =
+
+  val githubUrl = "https://api.github.com/users"
+
+  val refreshClickStream = createButtonClickStream(".refresh")
+  val close1ClickStream = createButtonClickStream(".close1")
+  val close2ClickStream = createButtonClickStream(".close2")
+  val close3ClickStream = createButtonClickStream(".close3")
+
+  def randomOffset = Math.floor(Math.random()*500)
+
+  def fetchStream(requestUrl: String) = FetchStream
+    .get(requestUrl)
+    .map(s => JSON.parse(s))
+    .map(r => NativeConverter[List[User]].fromNative(r))
+
+  def nextUser(users: List[User]) =
+    if users.isEmpty then None
+    else
+      val randomIdx = Math.floor(Math.random() * users.length).toInt
+      Some(users(randomIdx))
 
   val requestStream = refreshClickStream
-    .map {
-      _ =>
-        val randomOffset = Math.floor(Math.random()*500)
-        s"$githubUrl?since=$randomOffset"
-    }
+    .map(_ => s"$githubUrl?since=$randomOffset")
 
   val responseStream = requestStream
-    .flatMap {
-      requestUrl =>
-        FetchStream
-          .get(requestUrl)
-          .map(s => JSON.parse(s))
-          .map(r => NativeConverter[List[User]].fromNative(r))
-          .recover {
-            case e => Some(List())
-          }
-          .debugLogErrors()
-
-    }
-
-  def next(users: List[User]) = users(Math.floor(Math.random() * users.length).toInt)
-
-  val suggestionStream = responseStream
-    .combineWith(closeClickStream)
+    .flatMap(fetchStream)
     .drop(1)
-    .map(next)
 
-  suggestionStream.addObserver(Observer{
-    suggestion => println(s"suggestion: $suggestion")
+  val clearSuggestionsStream = EventStream.merge(
+    EventStream.fromValue(List()),
+    refreshClickStream.map(_ => List())
+  )
+
+  def createSuggestionStream(closeClickStream: EventStream[Unit]) =
+    EventStream.merge(
+      closeClickStream
+        .combineWith(responseStream),
+      clearSuggestionsStream
+    ).map(nextUser)
+
+
+  val suggestion1Stream = createSuggestionStream(close1ClickStream)
+  val suggestion2Stream = createSuggestionStream(close2ClickStream)
+  val suggestion3Stream = createSuggestionStream(close3ClickStream)
+
+  suggestion1Stream.addObserver(Observer{
+    user => renderSuggestion(user, ".suggestion1")
   })
 
+  suggestion2Stream.addObserver(Observer {
+    user => renderSuggestion(user, ".suggestion2")
+  })
+
+  suggestion3Stream.addObserver(Observer {
+    user => renderSuggestion(user, ".suggestion3")
+  })
 
 @main def main: Unit =
   dynOwner.activate()
-  println("scalajs rocks =)")
 
